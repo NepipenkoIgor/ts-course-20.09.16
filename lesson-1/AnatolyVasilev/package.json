@@ -1,0 +1,11 @@
+{
+  "name": "anatolyvasilev",
+  "version": "1.0.0",
+  "description": "homework",
+  "main": "todo-menu.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Anatoly Vasilev",
+  "license": "ISC"
+}
