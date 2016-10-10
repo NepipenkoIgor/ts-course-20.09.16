@@ -6,47 +6,6 @@
  * apiKey: '7fbc4d0fd04492d32fa9a2f718c6293e'
  */
 
-interface InitRequest {
-    method: string;
-    mode: string;
-    cache: string;
-}
-
-interface Request {
-    method: string;
-    url: string;
-    context: string;
-}
-
-declare var Request: {
-    prototype: Request,
-    new (input: string|Request, init?: InitRequest): Request;
-};
-
-
-interface ResponseBody {
-    blob: any;
-    formData: any;
-}
-
-interface ResponseInit {
-    status: string,
-    statusText: string
-}
-
-interface Response {
-    json: ()=> any;
-    text: ()=>string;
-}
-
-declare var Response: {
-    prototype: Response,
-    new (input: ResponseBody, init: ResponseInit): Response;
-};
-
-declare function fetch(input: string|Request): PromiseLike<Response>
-
-
 type opt = {
     elem: HTMLElement,
     uri: string,
@@ -82,28 +41,38 @@ class FlikrApp {
         this.input = <HTMLInputElement>this.elem.querySelector('.flickr-search-input');
         this.imagesBox = <HTMLDivElement>this.elem.querySelector('.image-area');
         this.searchButton = <HTMLButtonElement>this.elem.querySelector('.flickr-search-button');
-        this.searchButton.addEventListener('click', this.search.bind(this, this.render.bind(this)))
+        let debounced = _.debounce(this.search.bind(this, this.render.bind(this)), 500);
+        this.searchButton.addEventListener('click', debounced)
     }
 
     protected render(body: any): void {
-        this.photos = body.photos.photo as IPhoto[];
-        let content = '';
-        for (let photo of this.photos) {
-            content += `<div class="image-box">
-<img src="https://farm${photo.farm}.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}.jpg">
-        <p>${photo.title}</p><p>${this.getOwnerName(photo.owner, this).then(function (data) {
-            console.log(data['person'].username._content);
-            return data['person'].username._content;
-            })}</p></div>`
-        }
-        this.imagesBox.innerHTML = content;
+        this.photos = body.photos.photo.sort((a, b) => a.title > b.title) as IPhoto[];
+
+        Promise.all(this.photos.map((photo: IPhoto) => {
+            let url = new Request(`${this.uri}method=flickr.people.getInfo&api_key=${this.apiKey}&user_id=${photo.owner}&format=json&nojsoncallback=1`);
+
+            return fetch(url).then((res: Response): PromiseLike<any> => res.json());
+        })).then((owner: any) => {
+            this.photos.map((val, i): void => {
+                val.owner = owner[i].person.username._content;
+            });
+            let content: string = '';
+            for (let photo of this.photos) {
+                content += `<div class="image-box">` +
+                    `<img src="https://farm${photo.farm}.staticflickr.com/${photo.server}/${photo.id}_${photo.secret}.jpg">` +
+                    `<p>${photo.title}</p>` +
+                    `<p>${photo.owner}</p>` +
+                    `</div>`
+            }
+            this.imagesBox.innerHTML = content;
+        });
     }
 
-    protected search(cb: (body: any)=>any) {
+    protected search(cb: (body: any)=>void) {
         if (!this.input.value) {
             return;
         }
-        let text = this.input.value;
+        let text: string = this.input.value;
         this.input.value = '';
         let url = new Request(`${this.uri}method=${this.queryMethod}&api_key=${this.apiKey}&text=${text}&page=1&format=json&nojsoncallback=1`);
         this.getPhotos(url, cb)
@@ -114,28 +83,6 @@ class FlikrApp {
             .then((res: Response): PromiseLike<any> => res.json())
             .then(cb)
     }
-
-    protected getOwnerName(owner, self) {
-        return new Promise(function(resolve, reject) {
-            let http = new XMLHttpRequest();
-
-            http.open(`GET`, `${self.uri}method=flickr.people.getInfo&api_key=${self.apiKey}&user_id=${owner}&format=json&nojsoncallback=1`, true);
-            http.onload = function () {
-                if (http.status === 200) {
-                    // console.log(JSON.parse(http.response));
-                    resolve(JSON.parse(http.response))
-                } else {
-                    reject(http.statusText)
-                }
-            };
-            http.onerror = function () {
-                reject(http.statusText)
-            };
-            http.send();
-        })
-    }
-
-
 }
 
 let elem = <HTMLElement>document.querySelector('.flikr-box');
